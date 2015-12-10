@@ -120,13 +120,6 @@ class PullReq:
         logging.info ("loading info")
         pull = self.dst.pulls (self.num).get ()
 
-        if pull ["mergeable"] == False:
-            logging.info ("cannot merge because of conflicts")
-            return
-        elif pull ["mergeable"] == None:
-            logging.info ("cannot check if mergeable, try again later (see https://developer.github.com/v3/pulls/#response-1)")
-            return
-
         comments = []
 
         logging.info("loading comments")
@@ -141,6 +134,13 @@ class PullReq:
 
         if not self.has_merge_command (comments):
             logging.info ("no 'merge' command")
+            return
+
+        if pull ["mergeable"] == False:
+            logging.info ("cannot merge because of conflicts")
+            return
+        elif pull ["mergeable"] == None:
+            logging.info ("cannot check if mergeable, try again later (see https://developer.github.com/v3/pulls/#response-1)")
             return
 
         # structure:
