@@ -66,9 +66,6 @@ class PullReq:
     def add_comment(self, comment):
         self.dst.commits (self.sha).comments ().post (body=comment)
 
-    def merge (self, comment):
-        self.dst.pulls(self.num).merge ().put (sha=self.sha, commit_message=comment)
-
     def has_merge_command (self, comments):
         regex = r"^@(?:" + self.cfg ["user"] + "):{0,1} merge"
         rec = re.compile(regex)
@@ -178,8 +175,7 @@ class PullReq:
             for context, status in statuses.iteritems ():
                 message += " - %s: %s\n" % (context, status [0])
 
-            self.merge (message)
-            self.add_comment (message)
+            self.dst.pulls(self.num).merge ().put (sha=self.sha, commit_message=message)
         except github.ApiError:
             message = "failed to merge: %s" % (traceback.format_exc ())
             logging.info (message)
