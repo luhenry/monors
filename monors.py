@@ -43,6 +43,7 @@ class PullReq:
         self.pull = pull
         self.reviewers = [r.encode("utf8") for r in reviewers]
 
+        self.dry_run = self.cfg ["dry_run"] is not None
 
         self.dst_owner = self.cfg ["owner"].encode ("utf8")
         self.dst_repo  = self.cfg ["repo"].encode ("utf8")
@@ -64,7 +65,8 @@ class PullReq:
         return "pull https://github.com/%s/%s/pull/%d - %s - '%s'" % (self.dst_owner, self.dst_repo, self.num, self.short(), self.title)
 
     def add_comment(self, comment):
-        self.dst.commits (self.sha).comments ().post (body=comment)
+        if not self.dry_run:
+            self.dst.commits (self.sha).comments ().post (body=comment)
 
     def is_mergeable (self, info):
         if info ["mergeable"] is True:
@@ -172,7 +174,8 @@ class PullReq:
             for context, status in statuses.iteritems ():
                 message += " - %s: %s\n" % (context, status [0])
 
-            self.dst.pulls(self.num).merge ().put (sha=self.sha, commit_message=message)
+            if not self.dry_run:
+                self.dst.pulls(self.num).merge ().put (sha=self.sha, commit_message=message)
         except github.ApiError:
             message = "failed to merge: %s" % (traceback.format_exc ())
             logging.info (message)
@@ -192,6 +195,7 @@ def main():
         "repo":  os.environ ["MONORS_GH_REPO"],
         "user":  os.environ ["MONORS_GH_USERNAME"],
         "token": os.environ ["MONORS_GH_TOKEN"],
+        "dry_run": os.environ.get ("MONORS_DRY_RUN"),
     }
 
     gh = github.GitHub (username=cfg ["user"], access_token=cfg ["token"])
