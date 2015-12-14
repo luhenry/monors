@@ -37,12 +37,12 @@ import traceback
 import time
 
 class PullReq:
-    def __init__(self, cfg, gh, pull):
+    def __init__(self, cfg, gh, pull, reviewers):
         self.cfg = cfg
         self.gh = gh
         self.pull = pull
+        self.reviewers = [r.encode("utf8") for r in reviewers]
 
-        self.reviewers = [r.encode("utf8") for r in self.cfg["reviewers"]]
 
         self.dst_owner = self.cfg ["owner"].encode ("utf8")
         self.dst_repo  = self.cfg ["repo"].encode ("utf8")
@@ -196,8 +196,8 @@ def main():
 
     gh = github.GitHub (username=cfg ["user"], access_token=cfg ["token"])
 
-    cfg ["reviewers"] = [collaborator ["login"] for collaborator in gh.repos(cfg["owner"])(cfg["repo"]).collaborators().get()] + ["ludovic-henry"]
-    logging.info("found %d collaborators: %s" % (len (cfg ["reviewers"]), ", ".join (cfg ["reviewers"])))
+    reviewers = [collaborator ["login"] for collaborator in gh.repos(cfg["owner"])(cfg["repo"]).collaborators().get()] + ["ludovic-henry"]
+    logging.info("found %d collaborators: %s" % (len (reviewers), ", ".join (reviewers)))
 
     pulls = gh.repos (cfg["owner"]) (cfg["repo"]).pulls ().get (state="open", sort="updated", direction="desc")
     logging.info("found %d pull requests", len (pulls))
@@ -206,7 +206,7 @@ def main():
     logging.info("considering %d pull requests", len (pulls))
 
     for pull in pulls:
-        PullReq (cfg, gh, pull).try_merge ()
+        PullReq (cfg, gh, pull, reviewers).try_merge ()
 
 if __name__ == "__main__":
     try:
