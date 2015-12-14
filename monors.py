@@ -66,9 +66,19 @@ class PullReq:
     def add_comment(self, comment):
         self.dst.commits (self.sha).comments ().post (body=comment)
 
-    def has_merge_command (self, comments):
-        regex = r"^@(?:" + self.cfg ["user"] + "):{0,1} merge"
-        rec = re.compile(regex)
+    def is_mergeable (self, info):
+        if info ["mergeable"] is True:
+            return True
+
+        if info ["mergeable"] is False:
+            logging.info ("cannot merge because of conflicts")
+        elif info ["mergeable"] is None:
+            logging.info ("cannot check if mergeable, try again later (see https://developer.github.com/v3/pulls/#response-1)")
+
+        return False
+
+    def has_merge_command (self, info, comments):
+        rec = re.compile(r"^@(?:" + self.cfg ["user"] + "):{0,1} merge")
         for (_, user, comment) in comments:
             if user in self.reviewers and re.match(rec, comment) is not None:
                 return True
@@ -82,62 +92,31 @@ class PullReq:
             "AMD64 Linux",
         ]
 
-    def check_statuses_for_success (self, statuses, comments):
-        success = True
-        pending = False
-
-        failure_comment = ""
-
+    def is_successful (self, statuses):
         for context, status in statuses.iteritems ():
-            if status [0] != "success" and self.is_status_mandatory (context):
-
-                if success:
-                    message = "cannot merge:"
-                    failure_comment += message
-                    logging.info (message)
-
-                message = " - \"%s\" state is \"%s\"" % (context, status [0])
-                failure_comment += message
-                logging.info (message)
-
-                success = False
+            if self.is_status_mandatory (context):
                 if status [0] == "pending":
-                    pending = True
+                    return None
+                elif status [0] != "success":
+                    return False
 
-        if not success and not pending:
-            (_, user, comment) = comments [-1]
-            if not user is self.cfg ["user"].encode ("utf8") or not comment.startswith ("cannot merge:".encode ("utf8")):
-                self.add_comment (failure_comment)
-
-        return success
+        return True
 
     def try_merge (self):
         logging.info ("----- trying to merge %s" % (self.description ()))
 
         logging.info ("loading info")
-        pull = self.dst.pulls (self.num).get ()
+        info = self.dst.pulls (self.num).get ()
 
-        comments = []
+        if not self.is_mergeable (info):
+            return
 
         logging.info("loading comments")
-        for comment in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get ():
-            comments.append (
-                (
-                    comment ["created_at"].encode ("utf8"),
-                    comment ["user"]["login"].encode ("utf8"),
-                    comment ["body"].encode ('utf8') if comment ["body"] is not None else None
-                )
-            )
+        comments = [(c ["created_at"].encode ("utf8"), c ["user"]["login"].encode ("utf8"), c ["body"].encode ('utf8') if c ["body"] is not None else None)
+            for c in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get ()]
 
-        if not self.has_merge_command (comments):
+        if not self.has_merge_command (info, comments):
             logging.info ("no 'merge' command")
-            return
-
-        if pull ["mergeable"] == False:
-            logging.info ("cannot merge because of conflicts")
-            return
-        elif pull ["mergeable"] == None:
-            logging.info ("cannot check if mergeable, try again later (see https://developer.github.com/v3/pulls/#response-1)")
             return
 
         # structure:
@@ -157,7 +136,22 @@ class PullReq:
                         status ["updated_at"],
                     )
 
-        if not self.check_statuses_for_success (statuses, comments):
+        success = self.is_successful (statuses)
+        if success is not True:
+            message = "cannot merge:"
+            comment = message
+            logging.info (message)
+
+            for context, status in statuses.iteritems ():
+                message = " - \"%s\" state is \"%s\"%s" % (context, status [0], " (mandatory)" if self.is_status_mandatory (context) else "")
+                comment += message
+                logging.info (message)
+
+            if success is False:
+                (_, user, comment) = comments [-1]
+                if not user is self.cfg ["user"].encode ("utf8") or not comment.startswith ("cannot merge:".encode ("utf8")):
+                    self.add_comment (comment)
+
             return
 
         try:
