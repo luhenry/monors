@@ -170,9 +170,9 @@ class PullReq:
             message += "\n"
             # message += "Reviewed-by: %s" % (",".join (self.approval_list()))
             # message += "\n"
-            message += "Tests results:\n"
-            for context, status in statuses.iteritems ():
-                message += " - %s: %s\n" % (context, status [0])
+            # message += "Tests results:\n"
+            # for context, status in statuses.iteritems ():
+            #     message += " - %s: %s\n" % (context, status [0])
 
             if not self.dry_run:
                 self.dst.pulls(self.num).merge ().put (sha=self.sha, commit_message=message)
