@@ -100,7 +100,7 @@ class PullReq:
     def is_successful (self, statuses):
         for context in self.mandatory_context:
             if context not in statuses:
-                return False
+                return None
             if statuses [context][0] == "pending":
                 return None
             if statuses [context][0] != "success":
