@@ -189,6 +189,18 @@ class PullReq:
             logging.info (message)
             self.add_comment (message)
 
+def get_collaborators (gh, owner, repo):
+    page = 1
+    while True:
+        collaborators = gh.repos (owner) (repo).collaborators ().get (page=page, per_page=100)
+        if len (collaborators) == 0:
+            break
+
+        for collaborator in collaborators:
+            yield collaborator
+
+        page += 1
+
 def main():
     rfh = logging.StreamHandler (sys.stdout)
     rfh.setFormatter(logging.Formatter(fmt='%(levelname)s - %(message)s', datefmt="%Y-%m-%d %H:%M:%S %Z"))
@@ -208,7 +220,7 @@ def main():
 
     gh = github.GitHub (username=cfg ["user"], access_token=cfg ["token"])
 
-    reviewers = [collaborator ["login"] for collaborator in gh.repos(cfg["owner"])(cfg["repo"]).collaborators().get()] + ["ludovic-henry", "akoeplinger"]
+    reviewers = [collaborator ["login"] for collaborator in get_collaborators (gh, cfg["owner"], cfg["repo"])]
     logging.info("found %d collaborators: %s" % (len (reviewers), ", ".join (reviewers)))
 
     pulls = gh.repos (cfg["owner"]) (cfg["repo"]).pulls ().get (state="open", sort="updated", direction="desc")
