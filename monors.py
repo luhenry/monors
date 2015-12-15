@@ -58,6 +58,12 @@ class PullReq:
 
         self.title = self.pull ["title"].encode ('utf8') if self.pull ["title"] is not None else None
 
+        # TODO: load it from a configuration file?
+        self.mandatory_context = [
+            "i386 Linux",
+            "AMD64 Linux",
+        ]
+
     def short(self):
         return "%s/%s/%s = %.8s" % (self.src_owner, self.src_repo, self.ref, self.sha)
 
@@ -90,20 +96,14 @@ class PullReq:
 
         return False
 
-    def is_status_mandatory (self, context):
-        # TODO: maybe load it from a configuration file?
-        return context in [
-            "i386 Linux",
-            "AMD64 Linux",
-        ]
-
     def is_successful (self, statuses):
-        for context, status in statuses.iteritems ():
-            if self.is_status_mandatory (context):
-                if status [0] == "pending":
-                    return None
-                elif status [0] != "success":
-                    return False
+        for context in self.mandatory_context:
+            if context not in statuses:
+                return False
+            if statuses [context][0] == "pending":
+                return None
+            if statuses [context][0] != "success":
+                return False
 
         return True
 
@@ -148,7 +148,7 @@ class PullReq:
             logging.info (message)
 
             for context, status in statuses.iteritems ():
-                message = " - \"%s\" state is \"%s\"%s" % (context, status [0], " (mandatory)" if self.is_status_mandatory (context) else "")
+                message = " - \"%s\" state is \"%s\"%s" % (context, status [0], " (mandatory)" if context in self.mandatory_context else "")
                 comment += message
                 logging.info (message)
 
