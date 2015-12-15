@@ -168,7 +168,8 @@ class PullReq:
             message = ""
             message += "%s\n" % (self.title)
             message += "\n"
-            message += "%s\n" % (self.body)
+            if self.body is not None:
+                message += "%s\n" % (self.body)
 
             if not self.dry_run:
                 self.dst.pulls(self.num).merge ().put (sha=self.sha, commit_message=message)
