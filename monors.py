@@ -208,7 +208,7 @@ def main():
 
     gh = github.GitHub (username=cfg ["user"], access_token=cfg ["token"])
 
-    reviewers = [collaborator ["login"] for collaborator in gh.repos(cfg["owner"])(cfg["repo"]).collaborators().get()] + ["ludovic-henry"]
+    reviewers = [collaborator ["login"] for collaborator in gh.repos(cfg["owner"])(cfg["repo"]).collaborators().get()] + ["ludovic-henry", "akoeplinger"]
     logging.info("found %d collaborators: %s" % (len (reviewers), ", ".join (reviewers)))
 
     pulls = gh.repos (cfg["owner"]) (cfg["repo"]).pulls ().get (state="open", sort="updated", direction="desc")
