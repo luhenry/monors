@@ -83,7 +83,7 @@ class PullReq:
         if info ["user"]["login"].encode ("utf8") in self.reviewers and info ["title"].lower ().startswith ("[automerge]"):
             return True
 
-        rec = re.compile(r"^@(?:" + self.cfg ["user"] + "):{0,1} merge")
+        rec = re.compile(r"^@(?:" + self.cfg ["user"] + "):{0,1} (auto){0,1}merge")
         for (_, user, comment) in comments:
             if user in self.reviewers and re.match(rec, comment) is not None:
                 return True
