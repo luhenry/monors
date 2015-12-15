@@ -149,8 +149,8 @@ class PullReq:
             comment = message
             logging.info (message)
 
-            for context, status in statuses.iteritems ():
-                message = " - \"%s\" state is \"%s\"%s" % (context, status [0], " (mandatory)" if context in self.mandatory_context else "")
+            for context in self.mandatory_context:
+                message = " - \"%s\" state is \"%s\"" % (context, statuses [context][0] if context in statuses else "pending")
                 comment += message
                 logging.info (message)
 
