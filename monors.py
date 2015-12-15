@@ -57,7 +57,7 @@ class PullReq:
         self.sha = self.pull ["head"]["sha"].encode("utf8")
 
         self.title = self.pull ["title"].encode ('utf8') if self.pull ["title"] is not None else None
-        self.body = self.pull ["body"].encode ('utf8') if self.pull ["title"] is not None else None
+        self.body = self.pull ["body"].encode ('utf8') if self.pull ["body"] is not None else None
 
         # TODO: load it from a configuration file?
         self.mandatory_context = [
