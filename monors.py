@@ -118,8 +118,9 @@ class PullReq:
             return
 
         logging.info("loading comments")
-        comments = [(c ["created_at"].encode ("utf8"), c ["user"]["login"].encode ("utf8"), c ["body"].encode ('utf8') if c ["body"] is not None else None)
-            for c in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get ()]
+        comments  = [(info ["created_at"].encode ("utf8"), info ["user"]["login"].encode ("utf8"), self.body)] if self.body is not None else []
+        comments += [(comment ["created_at"].encode ("utf8"), comment ["user"]["login"].encode ("utf8"), comment ["body"].encode ('utf8') if comment ["body"] is not None else None)
+            for comment in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get ()]
 
         if not self.has_merge_command (info, comments):
             logging.info ("no 'merge' command")
