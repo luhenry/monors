@@ -57,6 +57,7 @@ class PullReq:
         self.sha = self.pull ["head"]["sha"].encode("utf8")
 
         self.title = self.pull ["title"].encode ('utf8') if self.pull ["title"] is not None else None
+        self.body = self.pull ["body"].encode ('utf8') if self.pull ["title"] is not None else None
 
         # TODO: load it from a configuration file?
         self.mandatory_context = [
@@ -164,15 +165,10 @@ class PullReq:
             for context, status in statuses.iteritems ():
                 logging.info (" - %s: %s" % (context, status [0]))
 
-            message = "Merge pull request #%d from %s/%s\n" % (self.num, self.src_owner, self.ref)
-            message += "\n"
+            message = ""
             message += "%s\n" % (self.title)
             message += "\n"
-            # message += "Reviewed-by: %s" % (",".join (self.approval_list()))
-            # message += "\n"
-            # message += "Tests results:\n"
-            # for context, status in statuses.iteritems ():
-            #     message += " - %s: %s\n" % (context, status [0])
+            message += "%s\n" % (self.body)
 
             if not self.dry_run:
                 self.dst.pulls(self.num).merge ().put (sha=self.sha, commit_message=message)
