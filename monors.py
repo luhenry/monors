@@ -155,6 +155,9 @@ class PullReq:
                 logging.info (message)
 
             if success is False:
+                if len (comments) == 0:
+                    self.add_comment (comment)
+
                 (_, user, comment) = comments [-1]
                 if not user is self.cfg ["user"].encode ("utf8") or not comment.startswith ("cannot merge:".encode ("utf8")):
                     self.add_comment (comment)
