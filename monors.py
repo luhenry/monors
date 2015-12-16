@@ -153,12 +153,12 @@ class PullReq:
         success = self.is_successful (statuses)
         if success is not True:
             message = "cannot merge:"
-            comment = message
+            comment = message + "\n"
             logging.info (message)
 
             for context in self.mandatory_context:
                 message = " - \"%s\" state is \"%s\"" % (context, statuses [context][0] if context in statuses else "pending")
-                comment += message
+                comment += message + "\n"
                 logging.info (message)
 
             if success is False:
