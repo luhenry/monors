@@ -161,13 +161,13 @@ class PullReq:
                 comment += message + "\n"
                 logging.info (message)
 
-            if success is False:
-                if len (comments) == 0:
-                    self.add_comment (comment)
-                else:
-                    (_, user, last_comment) = comments [-1]
-                    if user is not self.cfg ["user"].encode ("utf8") or not last_comment.startswith ("cannot merge:".encode ("utf8")):
-                        self.add_comment (comment)
+            # if success is False:
+            #     if len (comments) == 0:
+            #         self.add_comment (comment)
+            #     else:
+            #         (_, user, last_comment) = comments [-1]
+            #         if user is not self.cfg ["user"].encode ("utf8") or not last_comment.startswith ("cannot merge:".encode ("utf8")):
+            #             self.add_comment (comment)
 
             return
 
@@ -187,7 +187,7 @@ class PullReq:
         except github.ApiError:
             message = "failed to merge: %s" % (traceback.format_exc ())
             logging.info (message)
-            self.add_comment (message)
+            # self.add_comment (message)
 
 def get_collaborators (gh, owner, repo):
     page = 1
