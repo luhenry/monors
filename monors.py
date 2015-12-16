@@ -164,10 +164,10 @@ class PullReq:
             if success is False:
                 if len (comments) == 0:
                     self.add_comment (comment)
-
-                (_, user, comment) = comments [-1]
-                if not user is self.cfg ["user"].encode ("utf8") or not comment.startswith ("cannot merge:".encode ("utf8")):
-                    self.add_comment (comment)
+                else:
+                    (_, user, last_comment) = comments [-1]
+                    if user is not self.cfg ["user"].encode ("utf8") or not last_comment.startswith ("cannot merge:".encode ("utf8")):
+                        self.add_comment (comment)
 
             return
 
