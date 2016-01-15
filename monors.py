@@ -91,13 +91,13 @@ class PullReq:
             return True
 
         rec = re.compile(r"^@(" + self.cfg ["user"] + "):{0,1} (auto){0,1}merge", re.MULTILINE)
-        for (_, user, comment) in comments:
+        for (_, user, body) in comments:
             if user not in self.reviewers:
                 logging.debug ("%s: not a reviewer" % (user))
                 continue
 
-            if re.search(rec, comment) is None:
-                logging.debug ("%s: comment does not match\n%s" % (user, comment))
+            if re.search(rec, body) is None:
+                logging.debug ("%s: comment does not match\n%s" % (user, body))
                 continue
 
             return True
