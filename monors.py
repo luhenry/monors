@@ -73,7 +73,7 @@ class PullReq:
 
     def add_comment(self, comment):
         if not self.dry_run:
-            self.dst.commits (self.sha).comments ().post (body=comment)
+            self.dst.issues (self.num).comments ().post (body=comment)
 
     def is_mergeable (self, info):
         if info ["mergeable"] is True:
@@ -127,7 +127,7 @@ class PullReq:
         logging.info("loading comments")
         comments  = [(datetime.strptime (info ["created_at"], "%Y-%m-%dT%H:%M:%SZ"), info ["user"]["login"].encode ("utf8"), self.body)] if self.body is not None and len (self.body) > 0 else []
         comments += [(datetime.strptime (comment ["created_at"], "%Y-%m-%dT%H:%M:%SZ"), comment ["user"]["login"].encode ("utf8"), comment ["body"].encode ('utf8') if comment ["body"] is not None else None)
-            for comment in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get () + self.dst.commits (self.sha).comments ().get ()]
+            for comment in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get ()]
 
         comments = sorted (comments, key=lambda c: c [0])
 
