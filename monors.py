@@ -34,7 +34,7 @@ import re
 import logging
 import github
 import traceback
-import time
+from datetime import datetime
 
 class PullReq:
     def __init__(self, cfg, gh, pull, reviewers):
@@ -125,9 +125,11 @@ class PullReq:
             return
 
         logging.info("loading comments")
-        comments  = [(info ["created_at"].encode ("utf8"), info ["user"]["login"].encode ("utf8"), self.body)] if self.body is not None else []
-        comments += [(comment ["created_at"].encode ("utf8"), comment ["user"]["login"].encode ("utf8"), comment ["body"].encode ('utf8') if comment ["body"] is not None else None)
+        comments  = [(datetime.strptime (info ["created_at"], "%Y-%m-%dT%H:%M:%SZ"), info ["user"]["login"].encode ("utf8"), self.body)] if self.body is not None else []
+        comments += [(datetime.strptime (comment ["created_at"], "%Y-%m-%dT%H:%M:%SZ"), comment ["user"]["login"].encode ("utf8"), comment ["body"].encode ('utf8') if comment ["body"] is not None else None)
             for comment in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get ()]
+
+        comments = sorted (comments, key=lambda c: c [0])
 
         if not self.has_merge_command (info, comments):
             logging.info ("no 'merge' command")
@@ -143,11 +145,10 @@ class PullReq:
         logging.info ("loading statuses")
         for status in self.dst.statuses (self.sha).get ():
             if status ["creator"]["login"].encode ("utf8") == self.cfg["user"].encode("utf8"):
-                if status ["context"] not in statuses \
-                        or time.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > time.strptime (statuses [status ["context"]][1], "%Y-%m-%dT%H:%M:%SZ"):
+                if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]][1]:
                     statuses [status ["context"]] = (
                         status ["state"].encode ("utf8"),
-                        status ["updated_at"],
+                        datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"),
                     )
 
         success = self.is_successful (statuses)
