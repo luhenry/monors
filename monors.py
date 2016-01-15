@@ -34,7 +34,7 @@ import re
 import logging
 import github
 import traceback
-from datetime import datetime
+from datetime import datetime, MINYEAR
 
 class PullReq:
     def __init__(self, cfg, gh, pull, reviewers):
@@ -125,9 +125,9 @@ class PullReq:
             return
 
         logging.info("loading comments")
-        comments  = [(datetime.strptime (info ["created_at"], "%Y-%m-%dT%H:%M:%SZ"), info ["user"]["login"].encode ("utf8"), self.body)] if self.body is not None else []
+        comments  = [(datetime.strptime (info ["created_at"], "%Y-%m-%dT%H:%M:%SZ"), info ["user"]["login"].encode ("utf8"), self.body)] if self.body is not None and len (self.body) > 0 else []
         comments += [(datetime.strptime (comment ["created_at"], "%Y-%m-%dT%H:%M:%SZ"), comment ["user"]["login"].encode ("utf8"), comment ["body"].encode ('utf8') if comment ["body"] is not None else None)
-            for comment in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get ()]
+            for comment in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get () + self.dst.commits (self.sha).comments ().get ()]
 
         comments = sorted (comments, key=lambda c: c [0])
 
@@ -162,13 +162,30 @@ class PullReq:
                 comment += message + "\n"
                 logging.info (message)
 
-            # if success is False:
-            #     if len (comments) == 0:
-            #         self.add_comment (comment)
-            #     else:
-            #         (_, user, last_comment) = comments [-1]
-            #         if user is not self.cfg ["user"].encode ("utf8") or not last_comment.startswith ("cannot merge:".encode ("utf8")):
-            #             self.add_comment (comment)
+            if success is False:
+                if len (comments) == 0:
+                    logging.info ("add 'cannot merge' comment (1)")
+                    self.add_comment (comment)
+                else:
+                    last_comment = None
+                    for (date, user, body) in comments:
+                        if user == self.cfg ["user"].encode ("utf8") and body.startswith ("cannot merge:".encode ("utf8")) and (last_comment is None or date > last_comment [0]):
+                            last_comment = (date, user, body)
+
+                    if last_comment is None:
+                        logging.info ("add 'cannot merge' comment (2)")
+                        self.add_comment (comment)
+                    else:
+                        last_mandatory_context_update = datetime (MINYEAR, 1, 1, 0, 0, 0, 0)
+                        for context in self.mandatory_context:
+                            if statuses [context][1] > last_mandatory_context_update:
+                                last_mandatory_context_update = statuses [context][1]
+
+                        if last_mandatory_context_update > last_comment [0]:
+                            logging.info ("add 'cannot merge' comment (3)")
+                            self.add_comment (comment)
+                        else:
+                            logging.info ("discard 'cannot merge' comment, it's already posted")
 
             return
 
