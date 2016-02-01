@@ -36,6 +36,17 @@ import github
 import traceback
 from datetime import datetime, MINYEAR
 
+class Comment:
+    def __init__(self, login, body, created_at):
+        self.login = login
+        self.body = body
+        self.created_at = created_at
+
+class Status:
+    def __init__(self, state, updated_at):
+        self.state = state
+        self.updated_at = updated_at
+
 class PullReq:
     def __init__(self, cfg, gh, pull, reviewers):
         self.cfg = cfg
@@ -91,13 +102,13 @@ class PullReq:
             return True
 
         rec = re.compile(r"^@(" + self.cfg ["user"] + "):{0,1} (auto){0,1}merge", re.MULTILINE)
-        for (_, user, body) in comments:
-            if user not in self.reviewers:
-                logging.debug ("%s: not a reviewer" % (user))
+        for c in comments:
+            if c.login not in self.reviewers:
+                logging.debug ("%s: not a reviewer" % (c.login))
                 continue
 
-            if re.search(rec, body) is None:
-                logging.debug ("%s: comment does not match\n%s" % (user, body))
+            if re.search(rec, c.body) is None:
+                logging.debug ("%s: comment does not match\n%s" % (c.login, c.body))
                 continue
 
             return True
@@ -108,9 +119,9 @@ class PullReq:
         for context in self.mandatory_context:
             if context not in statuses:
                 return None
-            if statuses [context][0] == "pending":
+            if statuses [context].state == "pending":
                 return None
-            if statuses [context][0] != "success":
+            if statuses [context].state != "success":
                 return False
 
         return True
@@ -125,11 +136,11 @@ class PullReq:
             return
 
         logging.info("loading comments")
-        comments  = [(datetime.strptime (info ["created_at"], "%Y-%m-%dT%H:%M:%SZ"), info ["user"]["login"].encode ("utf8"), self.body)] if self.body is not None and len (self.body) > 0 else []
-        comments += [(datetime.strptime (comment ["created_at"], "%Y-%m-%dT%H:%M:%SZ"), comment ["user"]["login"].encode ("utf8"), comment ["body"].encode ('utf8') if comment ["body"] is not None else None)
+        comments  = [Comment (info ["user"]["login"].encode ("utf8"), self.body, datetime.strptime (info ["created_at"], "%Y-%m-%dT%H:%M:%SZ"))] if self.body is not None and len (self.body) > 0 else []
+        comments += [Comment (comment ["user"]["login"].encode ("utf8"), comment ["body"].encode ('utf8') if comment ["body"] is not None else None, datetime.strptime (comment ["created_at"], "%Y-%m-%dT%H:%M:%SZ"))
             for comment in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get ()]
 
-        comments = sorted (comments, key=lambda c: c [0])
+        comments = sorted (comments, key=lambda c: c.created_at)
 
         if not self.has_merge_command (info, comments):
             logging.info ("no 'merge' command")
@@ -137,19 +148,14 @@ class PullReq:
 
         # structure:
         #  - key: context
-        #  - value: tuple
-        #   - 0: state (pending/success/failure/error)
-        #   - 1: date
+        #  - value: Status
         statuses = {}
 
         logging.info ("loading statuses")
         for status in self.dst.statuses (self.sha).get ():
             if status ["creator"]["login"].encode ("utf8") == self.cfg["user"].encode("utf8"):
-                if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]][1]:
-                    statuses [status ["context"]] = (
-                        status ["state"].encode ("utf8"),
-                        datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"),
-                    )
+                if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
+                    statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"))
 
         success = self.is_successful (statuses)
         if success is not True:
@@ -158,7 +164,7 @@ class PullReq:
             logging.info (message)
 
             for context in self.mandatory_context:
-                message = " - \"%s\" state is \"%s\"" % (context, statuses [context][0] if context in statuses else "pending")
+                message = " - \"%s\" state is \"%s\"" % (context, statuses [context].state if context in statuses else "pending")
                 comment += message + "\n"
                 logging.info (message)
 
@@ -168,9 +174,9 @@ class PullReq:
                     self.add_comment (comment)
                 else:
                     last_comment = None
-                    for (date, user, body) in comments:
-                        if user == self.cfg ["user"].encode ("utf8") and body.startswith ("cannot merge:".encode ("utf8")) and (last_comment is None or date > last_comment [0]):
-                            last_comment = (date, user, body)
+                    for c in comments:
+                        if c.login == self.cfg ["user"].encode ("utf8") and c.body.startswith ("cannot merge:".encode ("utf8")) and (last_comment is None or c.created_at > last_comment.created_at):
+                            last_comment = c
 
                     if last_comment is None:
                         logging.info ("add 'cannot merge' comment (2)")
@@ -178,10 +184,10 @@ class PullReq:
                     else:
                         last_mandatory_context_update = datetime (MINYEAR, 1, 1, 0, 0, 0, 0)
                         for context in self.mandatory_context:
-                            if statuses [context][1] > last_mandatory_context_update:
-                                last_mandatory_context_update = statuses [context][1]
+                            if statuses [context].updated_at > last_mandatory_context_update:
+                                last_mandatory_context_update = statuses [context].updated_at
 
-                        if last_mandatory_context_update > last_comment [0]:
+                        if last_mandatory_context_update > last_comment.created_at:
                             logging.info ("add 'cannot merge' comment (3)")
                             self.add_comment (comment)
                         else:
@@ -192,7 +198,7 @@ class PullReq:
         try:
             logging.info ("merging successfully, tests results:")
             for context, status in statuses.iteritems ():
-                logging.info (" - %s: %s" % (context, status [0]))
+                logging.info (" - %s: %s" % (context, status.state))
 
             message = ""
             message += "%s\n" % (self.title)
