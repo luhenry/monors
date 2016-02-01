@@ -48,10 +48,10 @@ class Status:
         self.updated_at = updated_at
 
 class PullReq:
-    def __init__(self, cfg, gh, pull, reviewers):
+    def __init__(self, cfg, gh, info, reviewers):
         self.cfg = cfg
         self.gh = gh
-        self.pull = pull
+        self.info = info
         self.reviewers = [r.encode("utf8") for r in reviewers]
 
         self.dry_run = self.cfg ["dry_run"] is not None
@@ -60,21 +60,30 @@ class PullReq:
         self.dst_repo  = self.cfg ["repo"].encode ("utf8")
         self.dst       = self.gh.repos (self.dst_owner) (self.dst_repo)
 
-        self.src_owner = self.pull ["head"]["repo"]["owner"]["login"].encode("utf8")
-        self.src_repo  = self.pull ["head"]["repo"]["name"].encode("utf8")
+        self.src_owner = self.info ["head"]["repo"]["owner"]["login"].encode("utf8")
+        self.src_repo  = self.info ["head"]["repo"]["name"].encode("utf8")
 
-        self.num = self.pull ["number"]
-        self.ref = self.pull ["head"]["ref"].encode("utf8")
-        self.sha = self.pull ["head"]["sha"].encode("utf8")
+        self.num = self.info ["number"]
+        self.ref = self.info ["head"]["ref"].encode("utf8")
+        self.sha = self.info ["head"]["sha"].encode("utf8")
 
-        self.title = self.pull ["title"].encode ('utf8') if self.pull ["title"] is not None else None
-        self.body = self.pull ["body"].encode ('utf8') if self.pull ["body"] is not None else None
+        self.title = self.info ["title"].encode ('utf8') if self.info ["title"] is not None else None
+        self.body = self.info ["body"].encode ('utf8') if self.info ["body"] is not None else None
 
         # TODO: load it from a configuration file?
         self.mandatory_context = [
             "i386 Linux",
             "AMD64 Linux",
         ]
+
+        logging.info ("----- loading %s" % (self.description ()))
+
+        logging.info("loading comments")
+        self.comments  = [Comment (self.info ["user"]["login"].encode ("utf8"), self.body, datetime.strptime (self.info ["created_at"], "%Y-%m-%dT%H:%M:%SZ"))] if self.body is not None and len (self.body) > 0 else []
+        self.comments += [Comment (comment ["user"]["login"].encode ("utf8"), comment ["body"].encode ('utf8') if comment ["body"] is not None else None, datetime.strptime (comment ["created_at"], "%Y-%m-%dT%H:%M:%SZ"))
+            for comment in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get ()]
+
+        self.comments = sorted (self.comments, key=lambda c: c.created_at)
 
     def short(self):
         return "%s/%s/%s = %.8s" % (self.src_owner, self.src_repo, self.ref, self.sha)
@@ -86,23 +95,23 @@ class PullReq:
         if not self.dry_run:
             self.dst.issues (self.num).comments ().post (body=comment)
 
-    def is_mergeable (self, info):
-        if info ["mergeable"] is True:
+    def is_mergeable (self):
+        if self.info ["mergeable"] is True:
             return True
 
-        if info ["mergeable"] is False:
+        if self.info ["mergeable"] is False:
             logging.info ("cannot merge because of conflicts")
-        elif info ["mergeable"] is None:
+        elif self.info ["mergeable"] is None:
             logging.info ("cannot check if mergeable, try again later (see https://developer.github.com/v3/pulls/#response-1)")
 
         return False
 
-    def has_merge_command (self, info, comments):
-        if info ["user"]["login"].encode ("utf8") in self.reviewers and info ["title"].lower ().startswith ("[automerge]"):
+    def has_merge_command (self):
+        if self.info ["user"]["login"].encode ("utf8") in self.reviewers and self.info ["title"].lower ().startswith ("[automerge]"):
             return True
 
         rec = re.compile(r"^@(" + self.cfg ["user"] + "):{0,1} (auto){0,1}merge", re.MULTILINE)
-        for c in comments:
+        for c in self.comments:
             if c.login not in self.reviewers:
                 logging.debug ("%s: not a reviewer" % (c.login))
                 continue
@@ -127,22 +136,10 @@ class PullReq:
         return True
 
     def try_merge (self):
-        logging.info ("----- trying to merge %s" % (self.description ()))
-
-        logging.info ("loading info")
-        info = self.dst.pulls (self.num).get ()
-
-        if not self.is_mergeable (info):
+        if not self.is_mergeable ():
             return
 
-        logging.info("loading comments")
-        comments  = [Comment (info ["user"]["login"].encode ("utf8"), self.body, datetime.strptime (info ["created_at"], "%Y-%m-%dT%H:%M:%SZ"))] if self.body is not None and len (self.body) > 0 else []
-        comments += [Comment (comment ["user"]["login"].encode ("utf8"), comment ["body"].encode ('utf8') if comment ["body"] is not None else None, datetime.strptime (comment ["created_at"], "%Y-%m-%dT%H:%M:%SZ"))
-            for comment in self.dst.pulls (self.num).comments ().get () + self.dst.issues (self.num).comments ().get ()]
-
-        comments = sorted (comments, key=lambda c: c.created_at)
-
-        if not self.has_merge_command (info, comments):
+        if not self.has_merge_command ():
             logging.info ("no 'merge' command")
             return
 
@@ -169,12 +166,12 @@ class PullReq:
                 logging.info (message)
 
             if success is False:
-                if len (comments) == 0:
+                if len (self.comments) == 0:
                     logging.info ("add 'cannot merge' comment (1)")
                     self.add_comment (comment)
                 else:
                     last_comment = None
-                    for c in comments:
+                    for c in self.comments:
                         if c.login == self.cfg ["user"].encode ("utf8") and c.body.startswith ("cannot merge:".encode ("utf8")) and (last_comment is None or c.created_at > last_comment.created_at):
                             last_comment = c
 
@@ -247,14 +244,14 @@ def main():
     reviewers = [collaborator ["login"] for collaborator in get_collaborators (gh, cfg["owner"], cfg["repo"])]
     logging.info("found %d collaborators: %s" % (len (reviewers), ", ".join (reviewers)))
 
-    pulls = gh.repos (cfg["owner"]) (cfg["repo"]).pulls ().get (state="open", sort="updated", direction="desc")
+    pulls = gh.repos (cfg["owner"]) (cfg["repo"]).pulls ().get (state="open", sort="updated", direction="desc", per_page = 100)
     logging.info("found %d pull requests", len (pulls))
 
-    pulls = pulls [0:25]
+    pulls = pulls [0:5]
     logging.info("considering %d pull requests", len (pulls))
 
     for pull in pulls:
-        PullReq (cfg, gh, pull, reviewers).try_merge ()
+        PullReq (cfg, gh, gh.repos (cfg ["owner"]) (cfg ["repo"]).pulls (pull ["number"]).get (), reviewers).try_merge ()
 
 if __name__ == "__main__":
     try:
