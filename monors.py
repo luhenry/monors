@@ -228,9 +228,9 @@ def get_collaborators (gh, owner, repo):
 def main():
     rfh = logging.StreamHandler (sys.stdout)
     rfh.setFormatter(logging.Formatter(fmt='%(levelname)s - %(message)s', datefmt="%Y-%m-%d %H:%M:%S %Z"))
-    rfh.setLevel(logging.DEBUG)
+    rfh.setLevel(logging.INFO)
     logging.root.addHandler(rfh)
-    logging.root.setLevel(logging.DEBUG)
+    logging.root.setLevel(logging.INFO)
 
     logging.info("---------- starting run ----------")
 
