@@ -247,7 +247,7 @@ def main():
     pulls = gh.repos (cfg["owner"]) (cfg["repo"]).pulls ().get (state="open", sort="updated", direction="desc", per_page = 100)
     logging.info("found %d pull requests", len (pulls))
 
-    pulls = pulls [0:5]
+    pulls = pulls [0:50]
     logging.info("considering %d pull requests", len (pulls))
 
     for pull in pulls:
