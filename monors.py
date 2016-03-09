@@ -74,10 +74,6 @@ class PullReq:
         self.mandatory_context = [
             "i386 Linux",
             "AMD64 Linux",
-            "i386 OSX",
-            "i386 Windows",
-            "ARM hard float Linux",
-            "ARM soft float Linux",
         ]
 
         logging.info ("----- loading %s" % (self.description ()))
