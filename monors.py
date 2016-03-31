@@ -60,8 +60,12 @@ class PullReq:
         self.dst_repo  = self.cfg ["repo"].encode ("utf8")
         self.dst       = self.gh.repos (self.dst_owner) (self.dst_repo)
 
-        self.src_owner = self.info ["head"]["repo"]["owner"]["login"].encode("utf8")
-        self.src_repo  = self.info ["head"]["repo"]["name"].encode("utf8")
+        if self.info ["head"]["repo"] is not None:
+            self.src_owner = self.info ["head"]["repo"]["owner"]["login"].encode("utf8")
+            self.src_repo  = self.info ["head"]["repo"]["name"].encode("utf8")
+        else:
+            self.src_owner = "unknown owner"
+            self.src_repo = "unknown repo"
 
         self.num = self.info ["number"]
         self.ref = self.info ["head"]["ref"].encode("utf8")
@@ -241,7 +245,7 @@ def main():
 
     gh = github.GitHub (username=cfg ["user"], access_token=cfg ["token"])
 
-    reviewers = [collaborator ["login"] for collaborator in get_collaborators (gh, cfg["owner"], cfg["repo"])]
+    reviewers = sorted([collaborator ["login"] for collaborator in get_collaborators (gh, cfg["owner"], cfg["repo"])])
     logging.info("found %d collaborators: %s" % (len (reviewers), ", ".join (reviewers)))
 
     pulls = gh.repos (cfg["owner"]) (cfg["repo"]).pulls ().get (state="open", sort="updated", direction="desc", per_page = 100)
