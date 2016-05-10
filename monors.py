@@ -76,9 +76,9 @@ class PullReq:
 
         # TODO: load it from a configuration file?
         self.mandatory_context = [
-            "i386 Linux",
-            "AMD64 Linux",
-            "AMD64 OSX",
+            "Linux i386",
+            "Linux x64",
+            "OS X x64",
         ]
 
         logging.info ("----- loading %s" % (self.description ()))
