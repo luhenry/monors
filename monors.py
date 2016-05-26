@@ -78,8 +78,8 @@ class PullReq:
         self.mandatory_context = [
             "Linux i386",
             "Linux x64",
-            "OS X i386",
-            "OS X x64",
+            # "OS X i386",
+            # "OS X x64",
             "Windows i386",
         ]
 
