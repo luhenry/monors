@@ -133,11 +133,15 @@ class PullReq:
         return False
 
     def is_successful (self, statuses):
+        # first check that all context are done running
         for context in self.mandatory_context:
             if context not in statuses:
                 return None
             if statuses [context].state == "pending":
                 return None
+
+        # second check if any context is failed
+        for context in self.mandatory_context:
             if statuses [context].state != "success":
                 return False
 
