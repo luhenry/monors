@@ -4,6 +4,7 @@
 #
 # Author:
 #  Ludovic Henry (ludovic@xamarin.com)
+#  Alexander Koeplinger (alexander.koeplinger@xamarin.com)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -35,6 +36,7 @@ import logging
 import github
 import traceback
 from datetime import datetime, MINYEAR
+from slacker import Slacker
 
 class Comment:
     def __init__(self, login, body, created_at):
@@ -43,16 +45,20 @@ class Comment:
         self.created_at = created_at
 
 class Status:
-    def __init__(self, state, updated_at):
+    def __init__(self, state, updated_at, description, target_url):
         self.state = state
         self.updated_at = updated_at
+        self.description = description
+        self.target_url = target_url
 
 class PullReq:
-    def __init__(self, cfg, gh, info, reviewers):
+    def __init__(self, cfg, gh, slack, info, reviewers, gh_to_slack):
         self.cfg = cfg
         self.gh = gh
+        self.slack = slack
         self.info = info
         self.reviewers = [r.encode("utf8") for r in reviewers]
+        self.gh_to_slack = gh_to_slack
 
         self.dry_run = self.cfg ["dry_run"] is not None
 
@@ -68,6 +74,7 @@ class PullReq:
             self.src_repo = "unknown repo"
 
         self.num = self.info ["number"]
+        self.id = "%s/%s/pulls/%d" % (self.dst_owner, self.dst_repo, self.num)
         self.ref = self.info ["head"]["ref"].encode("utf8")
         self.sha = self.info ["head"]["sha"].encode("utf8")
 
@@ -97,7 +104,7 @@ class PullReq:
         return "%s/%s/%s = %.8s" % (self.src_owner, self.src_repo, self.ref, self.sha)
 
     def description(self):
-        return "pull https://github.com/%s/%s/pull/%d - %s - '%s'" % (self.dst_owner, self.dst_repo, self.num, self.short(), self.title)
+        return "pull request https://github.com/%s/%s/pull/%d - %s - '%s'" % (self.dst_owner, self.dst_repo, self.num, self.short(), self.title)
 
     def add_comment(self, comment):
         if not self.dry_run:
@@ -147,6 +154,13 @@ class PullReq:
 
         return True
 
+    def is_done (self, statuses):
+        for status in statuses:
+            if statuses [status].state == "pending":
+                return False
+
+        return True
+
     def try_merge (self):
         if not self.is_mergeable ():
             return
@@ -164,7 +178,7 @@ class PullReq:
         for status in self.dst.statuses (self.sha).get ():
             if status ["creator"]["login"].encode ("utf8") == self.cfg["user"].encode("utf8"):
                 if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
-                    statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"))
+                    statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
 
         success = self.is_successful (statuses)
         if success is not True:
@@ -222,6 +236,115 @@ class PullReq:
             logging.info (message)
             # self.add_comment (message)
 
+    def already_sent_message_for_pr (self, history):
+        if not self.id in history or history[self.id]["last_seen_sha"] != self.sha:
+          return False
+
+        # TODO: refactor/deduplicate this with below
+        # structure:
+        #  - key: context
+        #  - value: Status
+        statuses = {}
+
+        logging.info ("loading statuses")
+        for status in self.dst.statuses (self.sha).get ():
+          if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
+            statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+
+        for context, status in sorted (statuses.iteritems ()):
+          if not context in history[self.id]["last_seen_status"]:
+            return False
+          if status.updated_at.isoformat () != history[self.id]["last_seen_status"][context]["updated_at"]:
+            return False
+
+        return True
+
+    def try_slack (self):
+        logging.info ("Processing Slack notifications")
+
+        history = json.load (open ("monors_slack_history.json"))
+
+        if self.already_sent_message_for_pr (history):
+          logging.info ("Already sent Slack message for latest statuses in PR %d and sha %s, skipping." % (self.num, self.sha))
+          return
+
+	logging.info ("sha not seen on PR %d yet: %s" % (self.num, self.sha))
+
+        gh_user = self.info ["user"]["login"].encode ("utf8")
+        if not gh_user in self.gh_to_slack:
+          logging.info ("Couldn't find %s in the GitHub<->Slack user mapping file, skipping." % gh_user)
+          return
+
+        slack_user = self.gh_to_slack[gh_user]
+        logging.info ("Mapped GitHub user %s to Slack user %s." % (gh_user, slack_user))
+
+        # structure:
+        #  - key: context
+        #  - value: Status
+        statuses = {}
+
+        logging.info ("loading statuses")
+        for status in self.dst.statuses (self.sha).get ():
+          if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
+            statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+
+        done = self.is_done (statuses)
+        if not done:
+          logging.info ("PR builds are not done yet, skipping.")
+          return
+
+        message = "Build results for PR#%d - <https://github.com/%s/%s/pull/%d|%s>\n" % (self.num, self.dst_owner, self.dst_repo, self.num, self.title)
+
+        attachments = []
+
+        for context, status in sorted (statuses.iteritems ()):
+          att = {}
+          att["fallback"] = "%s *%s*: %s" % (status.state, context, status.description)
+          att["text"] = "*<%s|%s>*: %s" % (status.target_url, context, status.description)
+          if status.state == "success":
+            att["color"] = "good"
+          elif status.state == "pending":
+            att["color"] = "#ffee58"
+          elif " 0 failed." in status.description:
+            att["color"] = "#f57f17"
+          elif " 1 failed." in status.description:
+            att["color"] = "#f57f17"
+          elif " 2 failed." in status.description:
+            att["color"] = "#f57f17"
+          else:
+            att["color"] = "#bf360c"
+          att["mrkdwn_in"] = ["text"]
+          attachments.append (att)
+
+	# add PR result viewer link
+	prviewer_link = "https://jenkins.mono-project.com/view/All/job/jenkins-testresult-viewer/Test_Result_View/builds.html#groupBy=PRs&span=Last7Days&filterPr=%s" % self.num
+	att = {}
+	att["fallback"] = "PR result viewer: %s" % prviewer_link
+	att["title"] = "<%s|PR result viewer>" % prviewer_link
+	att["text"] = "Shows aggregated test results and analyzes failure causes."
+	att["color"] = "#d3d3d3"
+	att["mrkdwn_in"] = ["text"]
+	attachments.append (att)
+
+        if not self.id in history:
+          history[self.id] = {}
+
+        history[self.id]["last_seen_sha"] = self.sha
+        history[self.id]["last_seen_status"] = {}
+
+        for context, status in sorted (statuses.iteritems ()):
+          history[self.id]["last_seen_status"][context] = {}
+          history[self.id]["last_seen_status"][context]["state"] = status.state
+          history[self.id]["last_seen_status"][context]["updated_at"] = status.updated_at.isoformat ()
+
+        # write to file before sending so a send error doesn't cause an infinite send-fail-send loop
+        json.dump (history, open ("monors_slack_history.json", "w"), indent = 2, sort_keys = True)
+
+        self.slack.chat.post_message (channel="@%s" % slack_user, text=message, as_user="true", unfurl_links="false", attachments=attachments)
+
+        logging.info ("Sent Slack notification to %s" % slack_user)
+        return
+
 def get_collaborators (gh, owner, repo):
     page = 1
     while True:
@@ -248,10 +371,17 @@ def main():
         "repo":  os.environ ["MONORS_GH_REPO"],
         "user":  os.environ ["MONORS_GH_USERNAME"],
         "token": os.environ ["MONORS_GH_TOKEN"],
+        "slacktoken": os.environ ["MONORS_SL_TOKEN"],
         "dry_run": os.environ.get ("MONORS_DRY_RUN"),
     }
 
     gh = github.GitHub (username=cfg ["user"], access_token=cfg ["token"])
+    slack = Slacker (cfg ["slacktoken"])
+
+    rl = gh.rate_limit.get () # test authentication and rate limit
+    logging.info ("Remaining GitHub API calls before reaching limit: %d, resets at %s." % (rl["rate"]["remaining"], datetime.fromtimestamp(rl["rate"]["reset"])))
+
+    gh_slack_usermapping = json.load(open("monors_slack_users.json"))
 
     reviewers = sorted([collaborator ["login"] for collaborator in get_collaborators (gh, cfg["owner"], cfg["repo"])])
     logging.info("found %d collaborators: %s" % (len (reviewers), ", ".join (reviewers)))
@@ -263,7 +393,9 @@ def main():
     logging.info("considering %d pull requests", len (pulls))
 
     for pull in pulls:
-        PullReq (cfg, gh, gh.repos (cfg ["owner"]) (cfg ["repo"]).pulls (pull ["number"]).get (), reviewers).try_merge ()
+        pr = PullReq (cfg, gh, slack, gh.repos (cfg ["owner"]) (cfg ["repo"]).pulls (pull ["number"]).get (), reviewers, gh_slack_usermapping)
+        pr.try_merge ()
+        pr.try_slack ()
 
 if __name__ == "__main__":
     try:
