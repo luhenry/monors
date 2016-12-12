@@ -337,12 +337,14 @@ class PullReq:
           history[self.id]["last_seen_status"][context]["state"] = status.state
           history[self.id]["last_seen_status"][context]["updated_at"] = status.updated_at.isoformat ()
 
-        # write to file before sending so a send error doesn't cause an infinite send-fail-send loop
-        json.dump (history, open ("monors_slack_history.json", "w"), indent = 2, sort_keys = True)
+        if not self.dry_run:
+          # write to file before sending so a send error doesn't cause an infinite send-fail-send loop
+          json.dump (history, open ("monors_slack_history.json", "w"), indent = 2, sort_keys = True)
 
-        self.slack.chat.post_message (channel="@%s" % slack_user, text=message, as_user="true", unfurl_links="false", attachments=attachments)
+          self.slack.chat.post_message (channel="@%s" % slack_user, text=message, as_user="true", unfurl_links="false", attachments=attachments)
 
-        logging.info ("Sent Slack notification to %s" % slack_user)
+          logging.info ("Sent Slack notification to %s" % slack_user)
+
         return
 
 def get_collaborators (gh, owner, repo):
