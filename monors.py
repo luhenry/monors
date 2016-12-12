@@ -28,10 +28,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import ast
 import os
 import sys
 import json
 import re
+import urllib2
 import logging
 import github
 import traceback
@@ -259,6 +261,58 @@ class PullReq:
 
         return True
 
+    def fetch_failure_reasons (self, target_url):
+        result = self.fetch_failure_reasons_babysitter (target_url)
+
+        if result is None:
+          result = self.fetch_failure_reasons_failure_analyzer_plugin (target_url)
+
+        return result
+
+    def fetch_failure_reasons_babysitter (self, target_url):
+        try:
+          babysitter_blob = None
+          response = ast.literal_eval (urllib2.urlopen ("%s/Azure/api/python?tree=individualBlobs[blobURL]" % target_url).read())
+
+          for blob in response["individualBlobs"]:
+            if blob["blobURL"].endswith("babysitter_report.json_lines"):
+              babysitter_blob = urllib2.urlopen (blob["blobURL"]).read()
+
+          if babysitter_blob is None:
+            return None
+
+          message = ""
+          tests = ""
+          for line in filter (None, babysitter_blob.split ('\n')):
+            invocation = json.loads (line)
+            if invocation["final_code"] != 0:
+               message += "Exit code %s in step \"%s\"\n" % (invocation["final_code"], invocation["invocation"])
+               if "tests" in invocation:
+                 for test in invocation["tests"]:
+                   tests += "\t%s\n" % test
+
+          if tests == "":
+            return message
+          else:
+            return "%s\nFailed Tests:\n%s" % (message, tests)
+        except Exception:
+          return None
+
+    def fetch_failure_reasons_failure_analyzer_plugin (self, target_url):
+        try:
+          message = ""
+          issueIndex = 1
+          response = ast.literal_eval (urllib2.urlopen ("%s/api/python?tree=actions[foundFailureCauses[*]]" % target_url).read())
+          for action in response["actions"]:
+            if "_class" in action and action["_class"] == "com.sonyericsson.jenkins.plugins.bfa.model.FailureCauseBuildAction":
+              for cause in action["foundFailureCauses"]:
+                message += "Issue %s: %s:\n\t%s\n\n" % (issueIndex, cause["name"], cause["description"])
+                issueIndex += 1
+
+          return message
+        except Exception:
+          return None
+
     def try_slack (self):
         logging.info ("Processing Slack notifications")
 
@@ -268,7 +322,7 @@ class PullReq:
           logging.info ("Already sent Slack message for latest statuses in PR %d and sha %s, skipping." % (self.num, self.sha))
           return
 
-	logging.info ("sha not seen on PR %d yet: %s" % (self.num, self.sha))
+        logging.info ("sha not seen on PR %d yet: %s" % (self.num, self.sha))
 
         gh_user = self.info ["user"]["login"].encode ("utf8")
         if not gh_user in self.gh_to_slack:
@@ -301,6 +355,7 @@ class PullReq:
           att = {}
           att["fallback"] = "%s *%s*: %s" % (status.state, context, status.description)
           att["text"] = "*<%s|%s>*: %s" % (status.target_url, context, status.description)
+          att["footer"] = self.fetch_failure_reasons (status.target_url) if status.state != "success" else None
           if status.state == "success":
             att["color"] = "good"
           elif status.state == "pending":
@@ -316,15 +371,15 @@ class PullReq:
           att["mrkdwn_in"] = ["text"]
           attachments.append (att)
 
-	# add PR result viewer link
-	prviewer_link = "https://jenkins.mono-project.com/view/All/job/jenkins-testresult-viewer/Test_Result_View/builds.html#groupBy=PRs&span=Last7Days&filterPr=%s" % self.num
-	att = {}
-	att["fallback"] = "PR result viewer: %s" % prviewer_link
-	att["title"] = "<%s|PR result viewer>" % prviewer_link
-	att["text"] = "Shows aggregated test results and analyzes failure causes."
-	att["color"] = "#d3d3d3"
-	att["mrkdwn_in"] = ["text"]
-	attachments.append (att)
+        # add PR result viewer link
+        prviewer_link = "https://jenkins.mono-project.com/view/All/job/jenkins-testresult-viewer/Test_Result_View/builds.html#groupBy=PRs&span=Last7Days&filterPr=%s" % self.num
+        att = {}
+        att["fallback"] = "PR result viewer: %s" % prviewer_link
+        att["title"] = "<%s|PR result viewer>" % prviewer_link
+        att["text"] = "Shows aggregated test results and analyzes failure causes."
+        att["color"] = "#d3d3d3"
+        att["mrkdwn_in"] = ["text"]
+        attachments.append (att)
 
         if not self.id in history:
           history[self.id] = {}
@@ -344,6 +399,8 @@ class PullReq:
           self.slack.chat.post_message (channel="@%s" % slack_user, text=message, as_user="true", unfurl_links="false", attachments=attachments)
 
           logging.info ("Sent Slack notification to %s" % slack_user)
+        else:
+          logging.info ("Dry-run, not sending Slack message.")
 
         return
 
