@@ -371,16 +371,6 @@ class PullReq:
           att["mrkdwn_in"] = ["text"]
           attachments.append (att)
 
-        # add PR result viewer link
-        prviewer_link = "https://jenkins.mono-project.com/view/All/job/jenkins-testresult-viewer/Test_Result_View/builds.html#groupBy=PRs&span=Last7Days&filterPr=%s" % self.num
-        att = {}
-        att["fallback"] = "PR result viewer: %s" % prviewer_link
-        att["title"] = "<%s|PR result viewer>" % prviewer_link
-        att["text"] = "Shows aggregated test results and analyzes failure causes."
-        att["color"] = "#d3d3d3"
-        att["mrkdwn_in"] = ["text"]
-        attachments.append (att)
-
         if not self.id in history:
           history[self.id] = {}
 
