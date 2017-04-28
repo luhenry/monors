@@ -354,7 +354,7 @@ class PullReq:
         for context, status in sorted (statuses.iteritems ()):
           att = {}
           att["fallback"] = "%s *%s*: %s" % (status.state, context, status.description)
-          att["text"] = "*<%s|%s>*: %s" % (status.target_url, context, status.description)
+          att["text"] = "*<%s|%s>*: %s" % (status.target_url, context, status.description) if status.target_url else "*%s*: %s" % (context, status.description)
           att["footer"] = self.fetch_failure_reasons (status.target_url) if status.state != "success" else None
           if status.state == "success":
             att["color"] = "good"
