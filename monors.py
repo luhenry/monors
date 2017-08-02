@@ -123,11 +123,11 @@ class PullReq:
 
         return False
 
-    def has_merge_command (self):
+    def has_command (self, method):
         if self.info ["user"]["login"].encode ("utf8") in self.reviewers and self.info ["title"].lower ().startswith ("[automerge]"):
             return True
 
-        rec = re.compile(r"^@(" + self.cfg ["user"] + "):{0,1} (auto){0,1}merge", re.MULTILINE)
+        rec = re.compile(r"^@(" + self.cfg ["user"] + "):{0,1} (auto){0,1}" + method, re.MULTILINE)
         for c in self.comments:
             if c.login not in self.reviewers:
                 logging.debug ("%s: not a reviewer" % (c.login))
@@ -140,6 +140,15 @@ class PullReq:
             return True
 
         return False
+
+    def has_merge_command (self):
+        return self.has_command("merge")
+
+    def has_squash_command (self):
+        return self.has_command("squash")
+
+    def has_rebase_command (self):
+        return self.has_command("rebase")
 
     def is_successful (self, statuses):
         # first check that all context are done running
@@ -167,8 +176,16 @@ class PullReq:
         if not self.is_mergeable ():
             return
 
-        if not self.has_merge_command ():
-            logging.info ("no 'merge' command")
+        method = None
+        if self.has_merge_command ():
+            method = "merge"
+        elif self.has_squash_command ():
+            method = "squash"
+        elif self.has_rebase_command ():
+            method = "rebase"
+
+        if not method:
+            logging.info ("no 'merge', 'squash' or 'rebase' command")
             return
 
         # structure:
@@ -184,7 +201,7 @@ class PullReq:
 
         success = self.is_successful (statuses)
         if success is not True:
-            message = "cannot merge:"
+            message = "cannot " + method + ":"
             comment = message + "\n"
             logging.info (message)
 
@@ -195,16 +212,16 @@ class PullReq:
 
             if success is False:
                 if len (self.comments) == 0:
-                    logging.info ("add 'cannot merge' comment (1)")
+                    logging.info ("add 'cannot " + method + "' comment (1)")
                     self.add_comment (comment)
                 else:
                     last_comment = None
                     for c in self.comments:
-                        if c.login == self.cfg ["user"].encode ("utf8") and c.body.startswith ("cannot merge:".encode ("utf8")) and (last_comment is None or c.created_at > last_comment.created_at):
+                        if c.login == self.cfg ["user"].encode ("utf8") and c.body.startswith ("cannot " + method + ":".encode ("utf8")) and (last_comment is None or c.created_at > last_comment.created_at):
                             last_comment = c
 
                     if last_comment is None:
-                        logging.info ("add 'cannot merge' comment (2)")
+                        logging.info ("add 'cannot " + method + "' comment (2)")
                         self.add_comment (comment)
                     else:
                         last_mandatory_context_update = datetime (MINYEAR, 1, 1, 0, 0, 0, 0)
@@ -213,10 +230,10 @@ class PullReq:
                                 last_mandatory_context_update = statuses [context].updated_at
 
                         if last_mandatory_context_update > last_comment.created_at:
-                            logging.info ("add 'cannot merge' comment (3)")
+                            logging.info ("add 'cannot " + method + "' comment (3)")
                             self.add_comment (comment)
                         else:
-                            logging.info ("discard 'cannot merge' comment, it's already posted")
+                            logging.info ("discard 'cannot " + method + "' comment, it's already posted")
 
             return
 
@@ -232,7 +249,7 @@ class PullReq:
                 message += "%s\n" % (self.body)
 
             if not self.dry_run:
-                self.dst.pulls(self.num).merge ().put (sha=self.sha, commit_message=message)
+                self.dst.pulls(self.num).merge ().put (sha=self.sha, commit_message=message, merge_method=method)
         except github.ApiError:
             message = "failed to merge: %s" % (traceback.format_exc ())
             logging.info (message)
