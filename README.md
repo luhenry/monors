@@ -18,6 +18,13 @@ Monors: the Mono automatic merging tool for github
     - check statuses for failure/pending
     - merge
 
+Dependencies
+--------
+
+```
+pip install slacker
+```
+
 License
 -------
 
