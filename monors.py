@@ -331,6 +331,10 @@ class PullReq:
           return None
 
     def try_slack (self):
+        if not self.slack:
+            logging.info ("no Slack token set up")
+            return
+
         logging.info ("Processing Slack notifications")
 
         history = json.load (open ("monors_slack_history.json"))
@@ -437,17 +441,17 @@ def main():
         "repo":  os.environ ["MONORS_GH_REPO"],
         "user":  os.environ ["MONORS_GH_USERNAME"],
         "token": os.environ ["MONORS_GH_TOKEN"],
-        "slacktoken": os.environ ["MONORS_SL_TOKEN"],
+        "slacktoken": os.environ.get ("MONORS_SL_TOKEN"),
         "dry_run": os.environ.get ("MONORS_DRY_RUN"),
     }
 
     gh = github.GitHub (username=cfg ["user"], access_token=cfg ["token"])
-    slack = Slacker (cfg ["slacktoken"])
+    slack = Slacker (cfg ["slacktoken"]) if cfg ["slacktoken"] else None
 
     rl = gh.rate_limit.get () # test authentication and rate limit
     logging.info ("Remaining GitHub API calls before reaching limit: %d, resets at %s." % (rl["rate"]["remaining"], datetime.fromtimestamp(rl["rate"]["reset"])))
 
-    gh_slack_usermapping = json.load(open("monors_slack_users.json"))
+    gh_slack_usermapping = json.load(open("monors_slack_users.json")) if slack else None
 
     reviewers = sorted([collaborator ["login"] for collaborator in get_collaborators (gh, cfg["owner"], cfg["repo"])])
     logging.info("found %d collaborators: %s" % (len (reviewers), ", ".join (reviewers)))
