@@ -123,11 +123,11 @@ class PullReq:
 
         return False
 
-    def has_command (self, method):
+    def has_command (self, triggerword):
         if self.info ["user"]["login"].encode ("utf8") in self.reviewers and self.info ["title"].lower ().startswith ("[automerge]"):
             return True
 
-        rec = re.compile(r"^@(" + self.cfg ["user"] + "):{0,1} (auto){0,1}" + method, re.MULTILINE)
+        rec = re.compile(r"^@(" + self.cfg ["user"] + "):{0,1} (auto){0,1}" + triggerword, re.MULTILINE)
         for c in self.comments:
             if c.login not in self.reviewers:
                 logging.debug ("%s: not a reviewer" % (c.login))
@@ -145,10 +145,10 @@ class PullReq:
         return self.has_command("merge")
 
     def has_squash_command (self):
-        return self.has_command("squash")
+        return self.has_command("squash") or self.has_command("squash and merge")
 
     def has_rebase_command (self):
-        return self.has_command("rebase")
+        return self.has_command("rebase") or self.has_command("rebase and merge")
 
     def is_successful (self, statuses):
         # first check that all context are done running
