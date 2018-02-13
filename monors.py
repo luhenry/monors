@@ -83,17 +83,14 @@ class PullReq:
         self.title = self.info ["title"].encode ('utf8') if self.info ["title"] is not None else None
         self.body = self.info ["body"].encode ('utf8') if self.info ["body"] is not None else None
 
-        # TODO: load it from a configuration file?
-        self.mandatory_context = [
-            "Linux i386",
-            "Linux x64",
-            "Linux ARMv7",
-            "Linux AArch64",
-            "OS X i386",
-            "OS X x64",
-            "Windows i386",
-            "Windows x64",
-        ]
+        target_branch = self.info ['base']['ref']
+        contextes = self.gh.repos (cfg ["owner"]) (cfg ["repo"]).branches(target_branch).get() ['protection']['required_status_checks']['contexts']
+        self.mandatory_context = list ()
+
+        for c in contextes:
+            self.mandatory_context.append (c.encode("utf8"))
+
+        logging.info ("got mandatory_context from github: %s" % str(self.mandatory_context));
 
         logging.info ("----- loading %s" % (self.description ()))
 
