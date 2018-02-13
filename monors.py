@@ -53,6 +53,21 @@ class Status:
         self.description = description
         self.target_url = target_url
 
+context_dict = {}
+def get_required_context (gh, cfg, branch):
+    if branch in context_dict:
+        return context_dict [branch]
+
+    contextes = gh.repos (cfg ["owner"]) (cfg ["repo"]).branches(branch).get() ['protection']['required_status_checks']['contexts']
+    l = list ()
+
+    for c in contextes:
+        l.append (c.encode("utf8"))
+
+    context_dict [branch] = l
+    return l
+
+
 class PullReq:
     def __init__(self, cfg, gh, slack, info, reviewers, gh_to_slack):
         self.cfg = cfg
@@ -84,12 +99,7 @@ class PullReq:
         self.body = self.info ["body"].encode ('utf8') if self.info ["body"] is not None else None
 
         target_branch = self.info ['base']['ref']
-        contextes = self.gh.repos (cfg ["owner"]) (cfg ["repo"]).branches(target_branch).get() ['protection']['required_status_checks']['contexts']
-        self.mandatory_context = list ()
-
-        for c in contextes:
-            self.mandatory_context.append (c.encode("utf8"))
-
+        self.mandatory_context = get_required_context (self.gh, self.cfg, target_branch)
         logging.info ("got mandatory_context from github: %s" % str(self.mandatory_context));
 
         logging.info ("----- loading %s" % (self.description ()))
