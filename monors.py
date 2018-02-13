@@ -197,6 +197,8 @@ class PullReq:
             logging.info ("no 'merge', 'squash' or 'rebase' command")
             return
 
+        logging.info ("Processing merge (method=%s) for PR %d" % (method, self.num))
+
         # structure:
         #  - key: context
         #  - value: Status
@@ -207,6 +209,10 @@ class PullReq:
             if status ["creator"]["login"].encode ("utf8") == self.cfg["user"].encode("utf8"):
                 if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
                     statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+
+        if not self.is_done (statuses):
+            logging.info ("PR builds are not done yet, skipping.")
+            return
 
         success = self.is_successful (statuses)
         if success is not True:
