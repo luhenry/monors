@@ -53,6 +53,21 @@ class Status:
         self.description = description
         self.target_url = target_url
 
+context_dict = {}
+def get_required_context (gh, cfg, branch):
+    if branch in context_dict:
+        return context_dict [branch]
+
+    contextes = gh.repos (cfg ["owner"]) (cfg ["repo"]).branches(branch).get() ['protection']['required_status_checks']['contexts']
+    l = list ()
+
+    for c in contextes:
+        l.append (c.encode("utf8"))
+
+    context_dict [branch] = l
+    return l
+
+
 class PullReq:
     def __init__(self, cfg, gh, slack, info, reviewers, gh_to_slack):
         self.cfg = cfg
@@ -83,17 +98,9 @@ class PullReq:
         self.title = self.info ["title"].encode ('utf8') if self.info ["title"] is not None else None
         self.body = self.info ["body"].encode ('utf8') if self.info ["body"] is not None else None
 
-        # TODO: load it from a configuration file?
-        self.mandatory_context = [
-            "Linux i386",
-            "Linux x64",
-            "Linux ARMv7",
-            "Linux AArch64",
-            "OS X i386",
-            "OS X x64",
-            "Windows i386",
-            "Windows x64",
-        ]
+        target_branch = self.info ['base']['ref']
+        self.mandatory_context = get_required_context (self.gh, self.cfg, target_branch)
+        logging.info ("got mandatory_context from github: %s" % str(self.mandatory_context));
 
         logging.info ("----- loading %s" % (self.description ()))
 
@@ -190,6 +197,8 @@ class PullReq:
             logging.info ("no 'merge', 'squash' or 'rebase' command")
             return
 
+        logging.info ("Processing merge (method=%s) for PR %d" % (method, self.num))
+
         # structure:
         #  - key: context
         #  - value: Status
@@ -200,6 +209,10 @@ class PullReq:
             if status ["creator"]["login"].encode ("utf8") == self.cfg["user"].encode("utf8"):
                 if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
                     statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+
+        if not self.is_done (statuses):
+            logging.info ("PR builds are not done yet, skipping.")
+            return
 
         success = self.is_successful (statuses)
         if success is not True:
