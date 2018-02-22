@@ -65,6 +65,7 @@ def get_required_context (gh, cfg, branch):
         l.append (c.encode("utf8"))
 
     context_dict [branch] = l
+    logging.info ("got mandatory_context from github for branch %s: %s" % (branch, str(l)));
     return l
 
 
@@ -100,7 +101,6 @@ class PullReq:
 
         target_branch = self.info ['base']['ref']
         self.mandatory_context = get_required_context (self.gh, self.cfg, target_branch)
-        logging.info ("got mandatory_context from github: %s" % str(self.mandatory_context));
 
         logging.info ("----- loading %s" % (self.description ()))
 
