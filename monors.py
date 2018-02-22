@@ -181,6 +181,15 @@ class PullReq:
 
         return True
 
+    def load_statuses (self):
+        statuses = {}
+        logging.info ("loading statuses")
+        for status in self.dst.status (self.sha).get ()["statuses"]:
+            if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
+                statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+
+        return statuses
+
     def try_merge (self):
         if not self.is_mergeable ():
             return
@@ -202,13 +211,7 @@ class PullReq:
         # structure:
         #  - key: context
         #  - value: Status
-        statuses = {}
-
-        logging.info ("loading statuses")
-        for status in self.dst.statuses (self.sha).get ():
-            if status ["creator"]["login"].encode ("utf8") == self.cfg["user"].encode("utf8"):
-                if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
-                    statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+        statuses = self.load_statuses ()
 
         if not self.is_done (statuses):
             logging.info ("PR builds are not done yet, skipping.")
@@ -278,12 +281,7 @@ class PullReq:
         # structure:
         #  - key: context
         #  - value: Status
-        statuses = {}
-
-        logging.info ("loading statuses")
-        for status in self.dst.statuses (self.sha).get ():
-          if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
-            statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+        statuses = self.load_statuses ()
 
         for context, status in sorted (statuses.iteritems ()):
           if not context in history[self.id]["last_seen_status"]:
@@ -371,12 +369,7 @@ class PullReq:
         # structure:
         #  - key: context
         #  - value: Status
-        statuses = {}
-
-        logging.info ("loading statuses")
-        for status in self.dst.statuses (self.sha).get ():
-          if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
-            statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+        statuses = self.load_statuses ()
 
         done = self.is_done (statuses)
         if not done:
