@@ -184,7 +184,7 @@ class PullReq:
     def load_statuses (self):
         statuses = {}
         logging.info ("loading statuses")
-        for status in self.dst.statuses (self.sha).get ().all ():
+        for status in self.dst.status (self.sha).get ()["statuses"]:
             if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
                 statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
 
