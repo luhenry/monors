@@ -53,6 +53,8 @@ except ImportError:
 from collections import Iterable
 from datetime import datetime, timedelta, tzinfo
 from StringIO import StringIO
+from itertools import chain
+
 TIMEOUT=60
 
 _METHOD_MAP = dict(
@@ -64,6 +66,8 @@ _METHOD_MAP = dict(
 
 DEFAULT_SCOPE = None
 RW_SCOPE = 'user,public_repo,repo,repo:status,gist'
+LINK_RE = re.compile("<([^>]+)>; rel=\"([^\"]+)\"")
+DEFAULT_LINKS = dict((rel+'_page',None) for rel in ['next','last','prev','first'])
 
 class GitHub(object):
 
@@ -133,7 +137,7 @@ class GitHub(object):
     def __getattr__(self, attr):
         return _Callable(self, '/%s' % attr)
 
-    def _http(self, method, path, **kw):
+    def _http(self, method, path, url=None, **kw):
         nretries = 10
         data = None
         params = None
@@ -141,7 +145,8 @@ class GitHub(object):
             path = '%s?%s' % (path, _encode_params(kw))
         if method in ['POST', 'PATCH', 'PUT']:
             data = _encode_json(kw)
-        url = '%s%s' % (self._URL, path)
+        if not url:
+            url = '%s%s' % (self._URL, path)
         opener = urllib2.build_opener(urllib2.HTTPSHandler)
         request = urllib2.Request(url, data=data)
         request.get_method = _METHOD_MAP[method]
@@ -152,13 +157,16 @@ class GitHub(object):
         while True:
             try:
                 response = opener.open(request, timeout=TIMEOUT)
-                is_json = self._process_resp(response.headers)
+                is_json, links = self._process_resp(response.headers)
                 if is_json:
-                    return _parse_json(response.read())
+                    r = _parse_json(response.read().decode('utf-8'))
+                    if r.__class__.__name__ == 'list':
+                        r = ListObject(r,_gh=self,**links)
+                    return r
                 if response.code == 204:
                     return None
             except urllib2.HTTPError, e:
-                is_json = self._process_resp(e.headers)
+                is_json, _ = self._process_resp(e.headers)
                 json = None
                 if is_json:
                     json = _parse_json(e.read())
@@ -177,6 +185,7 @@ class GitHub(object):
 
     def _process_resp(self, headers):
         is_json = False
+        links = DEFAULT_LINKS.copy()
         if headers:
             for k in headers:
                 h = k.lower()
@@ -186,7 +195,11 @@ class GitHub(object):
                     self.x_ratelimit_limit = int(headers[k])
                 elif h=='content-type':
                     is_json = headers[k].startswith('application/json')
-        return is_json
+                elif h=='link':
+                    for link in headers[k].split(","):
+                        g = LINK_RE.match(headers[k]).groups()
+                        links[g[1]+'_page'] = g[0]
+        return (is_json,links)
 
 class _Executable(object):
 
@@ -265,6 +278,19 @@ def _parse_json(jsonstr):
             o[str(k)] = v
         return o
     return json.loads(jsonstr, object_hook=_obj_hook)
+
+class ListObject(list):
+    def __init__(self,*args,**kwargs):
+        list.__init__(self,*args)
+        self.__dict__ = kwargs
+    def all(self):
+        return chain.from_iterable(self._all())
+    def _all(self):
+        cur = self
+        while not cur.next_page is None:
+            yield (o for o in cur)
+            cur = self._gh._http('GET', '', url=cur.next_page)
+        yield (o for o in cur)
 
 class ApiError(BaseException):
 
