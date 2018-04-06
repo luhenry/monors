@@ -380,8 +380,8 @@ class PullReq:
 
         attachments = []
 
-        green_statuses = sorted (filter (lambda context, status: status.state == "success", statuses))
-        other_statuses = sorted (filter (lambda context, status: status.state != "success", statuses))
+        green_statuses = sorted (filter (lambda (context, status): status.state == "success", statuses.iteritems ()))
+        other_statuses = sorted (filter (lambda (context, status): status.state != "success", statuses.iteritems ()))
 
         for context, status in (other_statuses + green_statuses):
           att = {}
