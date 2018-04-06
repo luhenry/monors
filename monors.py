@@ -380,7 +380,10 @@ class PullReq:
 
         attachments = []
 
-        for context, status in sorted (statuses.iteritems ()):
+        green_statuses = sorted (filter (lambda s: s.state == "success", statuses))
+        other_statuses = sorted (filter (lambda s: s.state != "success", statuses))
+
+        for context, status in (other_statuses + green_statuses):
           att = {}
           att["fallback"] = "%s *%s*: %s" % (status.state, context, status.description)
           att["text"] = "*<%s|%s>*: %s" % (status.target_url, context, status.description) if status.target_url else "*%s*: %s" % (context, status.description)
