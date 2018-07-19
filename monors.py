@@ -187,7 +187,7 @@ class PullReq:
         pagenumber = 1
         counter = 0
         while True:
-            page = self.dst.status (self.sha).get (page=pagenumber)
+            page = self.dst.status (self.sha).get (page=pagenumber, per_page=100)
             ghstatuses = page ["statuses"];
             total_count = int (page ["total_count"])
 
