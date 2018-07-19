@@ -251,8 +251,6 @@ class PullReq:
 
                 logging.info (message)
 
-            logging.info ("comment: " + comment);
-
             if success is False:
                 if len (self.comments) == 0:
                     logging.info ("add 'cannot " + method + "' comment (1)")
