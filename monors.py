@@ -196,8 +196,10 @@ class PullReq:
 
             for status in ghstatuses:
                 counter += 1
-                if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
-                    statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+                ctx = status ["context"]
+                updated_at = datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ")
+                if ctx not in statuses or updated_at > statuses [ctx].updated_at:
+                    statuses [ctx] = Status (status ["state"].encode ("utf8"), updated_at, status["description"], status["target_url"])
 
             if counter >= total_count:
                 break
