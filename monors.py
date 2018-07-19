@@ -184,9 +184,25 @@ class PullReq:
     def load_statuses (self):
         statuses = {}
         logging.info ("loading statuses")
-        for status in self.dst.status (self.sha).get ()["statuses"]:
-            if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
-                statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+        pagenumber = 1
+        counter = 0
+        while True:
+            page = self.dst.status (self.sha).get (page=pagenumber)
+            ghstatuses = page ["statuses"];
+            total_count = int (page ["total_count"])
+
+            if len (ghstatuses) == 0:
+                break
+
+            for status in ghstatuses:
+                counter += 1
+                if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
+                    statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+
+            if counter >= total_count:
+                break
+
+            pagenumber += 1
 
         return statuses
 
