@@ -237,14 +237,21 @@ class PullReq:
 
         success = self.is_successful (statuses)
         if success is not True:
-            message = "cannot " + method + ":"
+            message = "Cannot " + method + " because the following required status checks are not successful:"
             comment = message + "\n"
             logging.info (message)
 
             for context in self.mandatory_context:
-                message = " - \"%s\" state is \"%s\"" % (context, statuses [context].state if context in statuses else "pending")
-                comment += message + "\n"
+                status_text = statuses [context].state if context in statuses else "pending"
+
+                message = " - \"%s\" state is \"%s\"" % (context, status_text)
+
+                if status_text != "success":
+                    comment += message + "\n"
+
                 logging.info (message)
+
+            logging.info ("comment: " + comment);
 
             if success is False:
                 if len (self.comments) == 0:
