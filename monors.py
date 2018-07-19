@@ -258,7 +258,7 @@ class PullReq:
                 else:
                     last_comment = None
                     for c in self.comments:
-                        if c.login == self.cfg ["user"].encode ("utf8") and c.body.startswith ("cannot " + method + ":".encode ("utf8")) and (last_comment is None or c.created_at > last_comment.created_at):
+                        if c.login == self.cfg ["user"].encode ("utf8") and c.body.startswith ("Cannot " + method + ":".encode ("utf8")) and (last_comment is None or c.created_at > last_comment.created_at):
                             last_comment = c
 
                     if last_comment is None:
