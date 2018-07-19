@@ -184,9 +184,27 @@ class PullReq:
     def load_statuses (self):
         statuses = {}
         logging.info ("loading statuses")
-        for status in self.dst.status (self.sha).get ()["statuses"]:
-            if status ["context"] not in statuses or datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ") > statuses [status ["context"]].updated_at:
-                statuses [status ["context"]] = Status (status ["state"].encode ("utf8"), datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ"), status["description"], status["target_url"])
+        pagenumber = 1
+        counter = 0
+        while True:
+            page = self.dst.status (self.sha).get (page=pagenumber, per_page=100)
+            ghstatuses = page ["statuses"];
+            total_count = int (page ["total_count"])
+
+            if len (ghstatuses) == 0:
+                break
+
+            for status in ghstatuses:
+                counter += 1
+                ctx = status ["context"]
+                updated_at = datetime.strptime (status ["updated_at"], "%Y-%m-%dT%H:%M:%SZ")
+                if ctx not in statuses or updated_at > statuses [ctx].updated_at:
+                    statuses [ctx] = Status (status ["state"].encode ("utf8"), updated_at, status["description"], status["target_url"])
+
+            if counter >= total_count:
+                break
+
+            pagenumber += 1
 
         return statuses
 
@@ -219,14 +237,21 @@ class PullReq:
 
         success = self.is_successful (statuses)
         if success is not True:
-            message = "cannot " + method + ":"
+            message = "Cannot " + method + " because the following required status checks are not successful:"
             comment = message + "\n"
             logging.info (message)
 
             for context in self.mandatory_context:
-                message = " - \"%s\" state is \"%s\"" % (context, statuses [context].state if context in statuses else "pending")
-                comment += message + "\n"
+                status_text = statuses [context].state if context in statuses else "pending"
+
+                message = " - \"%s\" state is \"%s\"" % (context, status_text)
+
+                if status_text != "success":
+                    comment += message + "\n"
+
                 logging.info (message)
+
+            logging.info ("comment: " + comment);
 
             if success is False:
                 if len (self.comments) == 0:
