@@ -482,7 +482,7 @@ def main():
     slack = Slacker (cfg ["slacktoken"]) if cfg ["slacktoken"] else None
 
     rl = gh.rate_limit.get () # test authentication and rate limit
-    logging.info ("Remaining GitHub API calls before reaching limit: %d, resets at %s." % (rl["rate"]["remaining"], datetime.fromtimestamp(rl["rate"]["reset"])))
+    logging.info ("Remaining GitHub REST API calls before reaching limit: %d, resets at %s." % (rl["rate"]["remaining"], datetime.fromtimestamp(rl["rate"]["reset"])))
 
     gh_slack_usermapping = json.load(open("monors_slack_users.json")) if slack else None
 
@@ -517,6 +517,8 @@ def main():
     request = urllib2.Request("https://api.github.com/graphql", json.dumps(query), headers)
     response = urllib2.urlopen(request).read()
     json_response = json.loads(response)
+
+    logging.info ("Remaining GitHub GraphQL API calls before reaching limit: %d, resets at %s. Cost of current call: %d." % (json_response["data"]["rateLimit"]["remaining"], json_response["data"]["rateLimit"]["resetAt"], json_response["data"]["rateLimit"]["cost"]))
 
     reviewers = sorted([edge["node"]["login"] for edge in json_response["data"]["repository"]["collaborators"]["edges"]])
     logging.info("found %d collaborators: %s" % (len (reviewers), ", ".join (reviewers)))
