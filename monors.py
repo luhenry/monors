@@ -132,17 +132,26 @@ class PullReq:
 
         return False
 
-    def has_command (self, triggerword):
-        if self.info ["user"]["login"].encode ("utf8") in self.reviewers and self.info ["title"].lower ().startswith ("[automerge]"):
-            return True
+    @staticmethod
+    def has_automerge_title (user, reviewers, title):
+        return user in reviewers and title.lower().startswith ("[automerge]")
 
-        rec = re.compile(r"^@(" + self.cfg ["user"] + "):{0,1} (auto){0,1}" + triggerword, re.MULTILINE)
+    @staticmethod
+    def get_command_regex (user, triggerword):
+        return re.compile(r"^@(" + user + "):{0,1} (auto){0,1}" + triggerword, re.MULTILINE)
+
+    @staticmethod
+    def has_comment_command (comment, command_regex):
+        return re.search(command_regex, comment) is not None
+
+    def has_command (self, triggerword):
+        rec = self.get_command_regex(self.cfg ["user"], triggerword)
         for c in self.comments:
             if c.login not in self.reviewers:
                 logging.debug ("%s: not a reviewer" % (c.login))
                 continue
 
-            if re.search(rec, c.body) is None:
+            if self.has_comment_command (c.body, rec) is None:
                 logging.debug ("%s: comment does not match\n%s" % (c.login, c.body))
                 continue
 
@@ -213,6 +222,8 @@ class PullReq:
             return
 
         method = None
+        if self.has_automerge_title(self.info ["user"]["login"].encode ("utf8"), self.reviewers, self.info ["title"]):
+            method = "merge"
         if self.has_merge_command ():
             method = "merge"
         elif self.has_squash_command ():
@@ -449,18 +460,6 @@ class PullReq:
 
         return
 
-def get_collaborators (gh, owner, repo):
-    page = 1
-    while True:
-        collaborators = gh.repos (owner) (repo).collaborators ().get (page=page, per_page=100)
-        if len (collaborators) == 0:
-            break
-
-        for collaborator in collaborators:
-            yield collaborator
-
-        page += 1
-
 def main():
     rfh = logging.StreamHandler (sys.stdout)
     rfh.setFormatter(logging.Formatter(fmt='%(levelname)s - %(message)s', datefmt="%Y-%m-%d %H:%M:%S %Z"))
@@ -487,16 +486,71 @@ def main():
 
     gh_slack_usermapping = json.load(open("monors_slack_users.json")) if slack else None
 
-    reviewers = sorted([collaborator ["login"] for collaborator in get_collaborators (gh, cfg["owner"], cfg["repo"])])
+    headers = { 'AUTHORIZATION': "token %s" % cfg ["token"], 'ACCEPT': 'application/json', 'CONTENT-TYPE': 'application/json' }
+    query = {}
+    query["query"] = '''
+            {
+                rateLimit {
+                    limit
+                    cost
+                    remaining
+                    resetAt
+                }
+                repository(owner: "mono", name: "mono") {
+                    collaborators(first: 100) {
+                        edges { node { login } }
+                    }
+                    pullRequests(last: 50, states: OPEN, orderBy: {field: UPDATED_AT, direction: ASC}) {
+                        edges {
+                            node {
+                                number
+                                mergeable
+                                title
+                                comments(last: 20) { edges { node { bodyText } } }
+                            }
+                        }
+                    }
+                }
+            }
+            '''
+
+    request = urllib2.Request("https://api.github.com/graphql", json.dumps(query), headers)
+    response = urllib2.urlopen(request).read()
+    json_response = json.loads(response)
+
+    reviewers = sorted([edge["node"]["login"] for edge in json_response["data"]["repository"]["collaborators"]["edges"]])
     logging.info("found %d collaborators: %s" % (len (reviewers), ", ".join (reviewers)))
 
-    pulls = gh.repos (cfg["owner"]) (cfg["repo"]).pulls ().get (state="open", sort="updated", direction="desc", per_page = 100)
+    pulls = [edge["node"] for edge in json_response["data"]["repository"]["pullRequests"]["edges"]]
     logging.info("found %d pull requests", len (pulls))
 
-    pulls = pulls [0:50]
-    logging.info("considering %d pull requests", len (pulls))
+    merge_regex = PullReq.get_command_regex(cfg ["user"], "merge")
+    squash_regex = PullReq.get_command_regex(cfg ["user"], "squash")
+    rebase_regex = PullReq.get_command_regex(cfg ["user"], "rebase")
+    squashmerge_regex = PullReq.get_command_regex(cfg ["user"], "squash and merge")
+    rebasemerge_regex = PullReq.get_command_regex(cfg ["user"], "rebase and merge")
 
     for pull in pulls:
+        if pull["mergeable"] != "MERGEABLE":
+            continue
+
+        # TODO: refactor this so we don't duplicate the logic with the real PullReq
+        process_pr = False
+        for edge in pull["comments"]["edges"]:
+            comment = edge["node"]["bodyText"]
+            if (PullReq.has_comment_command(comment, merge_regex) or
+                PullReq.has_comment_command(comment, squash_regex) or
+                PullReq.has_comment_command(comment, squashmerge_regex) or
+                PullReq.has_comment_command(comment, rebasemerge_regex)):
+                process_pr = True
+
+        if PullReq.has_automerge_title(cfg ["user"], reviewers, pull ["title"]):
+            process_pr = True
+
+        if not process_pr:
+            logging.info ("No commands in PR #%s: %s" % (pull ["number"], pull ["title"]))
+            continue
+
         pr = PullReq (cfg, gh, slack, gh.repos (cfg ["owner"]) (cfg ["repo"]).pulls (pull ["number"]).get (), reviewers, gh_slack_usermapping)
         pr.try_merge ()
         pr.try_slack ()
