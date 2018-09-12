@@ -542,6 +542,7 @@ def main():
             comment = edge["node"]["bodyText"]
             if (PullReq.has_comment_command(comment, merge_regex) or
                 PullReq.has_comment_command(comment, squash_regex) or
+                PullReq.has_comment_command(comment, rebase_regex) or
                 PullReq.has_comment_command(comment, squashmerge_regex) or
                 PullReq.has_comment_command(comment, rebasemerge_regex)):
                 process_pr = True
