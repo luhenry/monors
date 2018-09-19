@@ -550,12 +550,13 @@ def main():
         if PullReq.has_automerge_title(cfg ["user"], reviewers, pull ["title"]):
             process_pr = True
 
-        if not process_pr:
-            logging.info ("No commands in PR #%s: %s" % (pull ["number"], pull ["title"]))
-            continue
-
         pr = PullReq (cfg, gh, slack, gh.repos (cfg ["owner"]) (cfg ["repo"]).pulls (pull ["number"]).get (), reviewers, gh_slack_usermapping)
-        pr.try_merge ()
+
+        if process_pr:
+            pr.try_merge ()
+        else:
+            logging.info ("No commands in PR #%s: %s" % (pull ["number"], pull ["title"]))
+
         pr.try_slack ()
 
 if __name__ == "__main__":
