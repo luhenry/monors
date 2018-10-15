@@ -151,7 +151,7 @@ class PullReq:
                 logging.debug ("%s: not a reviewer" % (c.login))
                 continue
 
-            if self.has_comment_command (c.body, rec) is None:
+            if not self.has_comment_command (c.body, rec):
                 logging.debug ("%s: comment does not match\n%s" % (c.login, c.body))
                 continue
 
