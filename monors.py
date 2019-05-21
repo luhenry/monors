@@ -133,8 +133,17 @@ class PullReq:
         return False
 
     @staticmethod
-    def has_automerge_title (user, reviewers, title):
-        return user in reviewers and title.lower().startswith ("[automerge]")
+    def has_auto_title (user, reviewers, title, triggerword):
+        return user in reviewers and title.lower().startswith (triggerword)
+
+    def has_automerge_title (user, reviewer, title):
+        return self.has_auto_title (user, reviewer, title, "[automerge]")
+
+    def has_autosquash_title (user, reviewer, title):
+        return self.has_auto_title (user, reviewer, title, "[autosquash]")
+
+    def has_autorebase_title (user, reviewer, title):
+        return self.has_auto_title (user, reviewer, title, "[autorebase]")
 
     @staticmethod
     def get_command_regex (user, triggerword):
@@ -222,13 +231,13 @@ class PullReq:
             return
 
         method = None
-        if self.has_automerge_title(self.info ["user"]["login"].encode ("utf8"), self.reviewers, self.info ["title"]):
+        user = self.info ["user"]["login"].encode ("utf8")
+        title = self.info ["title"]
+        if self.has_automerge_title(user, self.reviewers, title) or self.has_merge_command():
             method = "merge"
-        if self.has_merge_command ():
-            method = "merge"
-        elif self.has_squash_command ():
+        elif self.has_autosquash_title(user, self.reviewers, title) or self.has_squash_command():
             method = "squash"
-        elif self.has_rebase_command ():
+        elif self.has_autorebase_title(user, self.reviewers, title) or self.has_rebase_command():
             method = "rebase"
 
         if not method:
