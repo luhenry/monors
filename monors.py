@@ -136,14 +136,17 @@ class PullReq:
     def has_auto_title (user, reviewers, title, triggerword):
         return user in reviewers and title.lower().startswith (triggerword)
 
+    @staticmethod
     def has_automerge_title (user, reviewer, title):
-        return self.has_auto_title (user, reviewer, title, "[automerge]")
+        return PullReq.has_auto_title (user, reviewer, title, "[automerge]")
 
+    @staticmethod
     def has_autosquash_title (user, reviewer, title):
-        return self.has_auto_title (user, reviewer, title, "[autosquash]")
+        return PullReq.has_auto_title (user, reviewer, title, "[autosquash]")
 
+    @staticmethod
     def has_autorebase_title (user, reviewer, title):
-        return self.has_auto_title (user, reviewer, title, "[autorebase]")
+        return PullReq.has_auto_title (user, reviewer, title, "[autorebase]")
 
     @staticmethod
     def get_command_regex (user, triggerword):
