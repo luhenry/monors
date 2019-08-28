@@ -227,6 +227,30 @@ class PullReq:
 
             pagenumber += 1
 
+        counter = 0
+        pagenumber = 1
+        while True:
+            page = self.dst.commits (self.sha).check_runs.get (page=pagenumber, per_page=100)
+            check_runs = page ["check_runs"]
+            total_count = int (page ["total_count"])
+
+            if len (check_runs) == 0:
+                break
+
+            for check_run in check_runs:
+                print ("check_run: " + check_run ["name"])
+                print ("conclusion: " + check_run ["conclusion"])
+                counter += 1
+                ctx = check_run ["name"]
+                updated_at = datetime.strptime (check_run ["app"] ["updated_at"], "%Y-%m-%dT%H:%M:%SZ")
+                if ctx not in statuses or updated_at > statuses [ctx].updated_at:
+                    statuses [ctx] = Status (check_run ["conclusion"].encode ("utf8"), updated_at, ctx, check_run ["html_url"])
+
+            if counter >= total_count:
+                break
+
+            pagenumber += 1
+
         return statuses
 
     def try_merge (self):

@@ -141,6 +141,7 @@ class GitHub(object):
         nretries = 10
         data = None
         params = None
+        path = path.replace ("check_runs", "check-runs")
         if method=='GET' and kw:
             path = '%s?%s' % (path, _encode_params(kw))
         if method in ['POST', 'PATCH', 'PUT']:
@@ -152,6 +153,11 @@ class GitHub(object):
         request.get_method = _METHOD_MAP[method]
         if self._authorization:
             request.add_header('Authorization', self._authorization)
+        if "check-runs" in path:
+            # experimental API
+            if request.has_header ('Accept'):
+                request.remove_header('Accept')
+            request.add_header('Accept', 'application/vnd.github.antiope-preview+json')
         if method in ['POST', 'PATCH', 'PUT']:
             request.add_header('Content-Type', 'application/x-www-form-urlencoded')
         while True:
