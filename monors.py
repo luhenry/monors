@@ -229,6 +229,7 @@ class PullReq:
 
         counter = 0
         pagenumber = 1
+        result_regex = re.compile (r"\[(.*?)\]", re.MULTILINE)
         while True:
             page = self.dst.commits (self.sha).check_runs.get (page=pagenumber, per_page=100)
             check_runs = page ["check_runs"]
@@ -243,7 +244,9 @@ class PullReq:
                     counter += 1
                     updated_at = datetime.strptime (check_run ["app"] ["updated_at"], "%Y-%m-%dT%H:%M:%SZ")
                     if ctx not in statuses or updated_at > statuses [ctx].updated_at:
-                        statuses [ctx] = Status (check_run ["conclusion"].encode ("utf8"), updated_at, ctx, check_run ["html_url"])
+                        extract = re.search (result_regex, check_run ["output"] ["summary"].encode ("utf8")).group (1)
+                        desc = check_run ["output"] ["title"].encode ("utf8") + ": " + extract
+                        statuses [ctx] = Status (check_run ["conclusion"].encode ("utf8"), updated_at, desc, check_run ["html_url"])
                 else:
                     logging.info ("no conclusion for job %s" % ctx)
 
